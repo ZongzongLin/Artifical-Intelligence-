@@ -1,6 +1,6 @@
 ##Python for  Reversi
 
-This one of a  final exam for me to develop a ai for Reversi by MCST. I have searched lots of resource, it's hard to list these. thanks for their selfless contribution!
+This one of a  final exam for me to develop a ai for Reversi by MCTS. I have searched lots of resource, it's hard to list these. thanks for their selfless contribution!
 
 It is a structure that similar (almost same) for [UCThello][1]
 which original version is written by Javascript.
