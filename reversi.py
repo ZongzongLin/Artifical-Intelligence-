@@ -19,6 +19,7 @@ class TreeNode:
         self.children = []
         self.activeplayer = player
 
+
     def addchild(self, state, parent_action, child_player):
         node = TreeNode(self, state, parent_action, child_player)
         self.unreach.remove(parent_action)
@@ -30,32 +31,28 @@ class TreeNode:
         for i in range(len(self.children)):
             child = self.children[i]
             uctValue = child.wins/child.visits + \
-                2*math.sqrt(math.log(self.visits)/child.visits)
+                math.sqrt(2*math.log(self.visits)/child.visits)
             if uctValue > bestValue:
                 selected = child
                 bestValue = uctValue
         return selected
 
     def update(self, result):
-        node_one=self
-        while(node_one.parent!=None):
-            node_one.visits += 1.0
-            node_one.wins += 2*int(int(result) == int(self.activeplayer))-1.0
-            node_one=node_one.parent
-        node_one.visits += 1.0
-        node_one.wins += 2 * int(int(result) == int(self.activeplayer)) - 1.0
-
+        self.visits += 1.0
+        self.wins +=int(int(result) == int(self.activeplayer))
+        if not self.parent is None:
+            self.parent.update(result)
 
     def mostVisitedchild(self):
         mostVisited = self.children[0]
         for i in range(len(self.children)):
-            if self.children[i].wins/self.children[i].visits > mostVisited.visits:
+            if self.children[i].visits > mostVisited.visits:
                 mostVisited = self.children[i]
         return mostVisited
 
 
-def UCT_MCTS(state, max_Iteration, max_time, turn):
-    blocksize = 50
+def UCT_MCTS(state, max_Iteration, max_time, turn,pos_weight):
+    blocksize = 1000
     node_visited = 0.0
     root = TreeNode(None, state, None, turn)
     current_time = time.time()
@@ -82,21 +79,49 @@ def UCT_MCTS(state, max_Iteration, max_time, turn):
                                           1], node.activeplayer)
                 node = node.addchild(temp_state, action, -1*node.activeplayer)
             # simulation
-            actions = feasible_actions(temp_state, node.activeplayer)
-            now_turn = copy.deepcopy(node.activeplayer)
-            while len(actions) > 0:
-                action = random.choice(actions)
-                temp_state = update_state(
-                    temp_state, action[0], action[1], now_turn)
-                node_visited += 1
-                now_turn = -1*now_turn
-                actions = feasible_actions(temp_state, now_turn)
+            now_turn=node.activeplayer
+            actions = feasible_actions(temp_state, now_turn)
+            while True:
+                if len(actions)>0:
+                    #action = random.choice(actions)
+                    action=chose_epsilon_pos_weight(actions,pos_weight)
+                    temp_state = update_state(temp_state, action[0], action[1], now_turn)
+                    node_visited += 1
+                    now_turn = -1*now_turn
+                    actions = feasible_actions(temp_state, now_turn)
+                else:
+                    now_turn=-1*now_turn
+                    actions = feasible_actions(temp_state, now_turn)
+                    if len(actions)==0:
+                        break
             # backpropagation
             result = game_winner(temp_state)
             while(node):
                 node.update(result)
                 node = node.parent
+    print node_visited
     return root.mostVisitedchild().action
+
+def chose_epsilon_pos_weight(actions,pos_weight):
+    pos_pair=[pos_weight[action[0]][action[1]] for action in actions]
+    sum_pair=float(sum(pos_pair))
+    pair=map(lambda x:x/sum_pair,pos_pair)
+    pairs=zip(pair,actions)
+    q=random.random()
+    cumulate=0.0
+    for prob,action in pairs:
+        if q<cumulate:
+            cumulate+=prob
+        else:
+            return action
+
+
+
+def game_not_end(temp_state):
+    if feasible_actions(temp_state,1) or feasible_actions(temp_state,-1):
+        return True
+    else:
+        return False
 
 
 def game_winner(state):
@@ -598,6 +623,7 @@ if __name__ == '__main__':
     pygame.display.update()
     flag = Reversi.feasible_move_show()
     old_flag = flag
+    pos_weight=np.array([[7,2,5,4,4,5,2,7],[2,1,3,3,3,3,1,2],[5,3,6,5,5,5,3,5],[4,3,5,6,6,5,3,4],[4,3,5,6,6,5,3,4],[5,3,6,5,5,5,3,5],[2,1,3,3,3,3,1,2],[7,2,5,4,4,5,2,7]])
     model = raw_input('Battle with ai ? (y/n)')
     if model == 'y':
         first = raw_input('please choose who first (black first), if ai (y/n)?')
@@ -614,7 +640,7 @@ if __name__ == '__main__':
                     ai_pos = quick_policy(flag)
                 else:
                     state = Reversi.state.copy()
-                    ai_pos = UCT_MCTS(state, 100, 10, ai)
+                    ai_pos = UCT_MCTS(state, 100, 5, ai,pos_weight)
                 Reversi.move(ai_pos[0], ai_pos[1])
 
             else:
@@ -635,11 +661,13 @@ if __name__ == '__main__':
                     "No place for white", True, (0, 0, 255))
                 screen.blit(text_surface, (120, 150))
                 pygame.display.update()
+                time.sleep(0.5)
             elif Reversi.turn == -1:
                 text_surface = my_font.render(
                     "No place for black", True, (0, 0, 255))
                 screen.blit(text_surface, (120, 150))
                 pygame.display.update()
+                time.sleep(0.5)
         Reversi.plot_graph()
         Reversi.turn = -1*Reversi.turn
     Reversi.winorlose()
