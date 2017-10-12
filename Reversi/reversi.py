@@ -11,6 +11,7 @@ import random
 class TreeNode:
 
     def __init__(self, parentnode, state, parene_action, player):
+        self.state=state
         self.action = parene_action
         self.parent = parentnode
         self.wins = 0.0
@@ -26,20 +27,27 @@ class TreeNode:
         self.children.append(node)
         return node
 
-    def selectchild(self):
-        bestValue = -1000000
+    def selectchild(self,we_turn):
+        if self.activeplayer==we_turn:
+            bestValue=-1000000000
+        else:
+            bestValue=1000000000
         for i in range(len(self.children)):
             child = self.children[i]
             uctValue = child.wins/child.visits + \
                 math.sqrt(2*math.log(self.visits)/child.visits)
-            if uctValue > bestValue:
+            if self.activeplayer==we_turn:
+                if uctValue > bestValue:
+                    selected = child
+                    bestValue = uctValue
+            elif uctValue < bestValue:
                 selected = child
                 bestValue = uctValue
         return selected
 
     def update(self, result):
         self.visits += 1.0
-        self.wins +=int(int(result) == int(self.activeplayer))
+        self.wins +=2*int(result == self.activeplayer)-1
         if not self.parent is None:
             self.parent.update(result)
 
@@ -50,41 +58,38 @@ class TreeNode:
                 mostVisited = self.children[i]
         return mostVisited
 
-
-def UCT_MCTS(state, max_Iteration, max_time, turn,pos_weight):
-    blocksize = 1000
+def UCT_MCTS(state, max_Iteration, max_time, turn,pos_weight,op_chosen_node):
+    we_turn=turn
+    blocksize = 50
     node_visited = 0.0
-    root = TreeNode(None, state, None, turn)
+    if op_chosen_node:
+        root=op_chosen_node
+        root.parent=None
+        root.action=None
+    else:
+        root = TreeNode(None, state, None, turn)
+    print root.visits
     current_time = time.time()
-    end = False
-    for k in range(max_Iteration):
-        if end:
-            break
-        for s in range(blocksize):
-            if time.time() > max_time + current_time:
-                end = True
-                print time.time()-current_time
-                break
-            node = root
-            temp_state = state.copy()
+    while time.time()<current_time+max_time:
+        node = root
+        for block in range(blocksize):
             # selection
-            while len(node.unreach) == 0 and len(node.children) > 0:
-                node = node.selectchild()
-                temp_state = update_state(temp_state, node.action[
-                                          0], node.action[1], node.activeplayer)
+            if len(node.unreach) == 0 and len(node.children) > 0:
+                node = node.selectchild(we_turn)
             # expansion
             if len(node.unreach) > 0:
                 action = random.choice(node.unreach)
-                temp_state = update_state(temp_state, action[0], action[
+                temp_state = update_state(node.state.copy(), action[0], action[
                                           1], node.activeplayer)
                 node = node.addchild(temp_state, action, -1*node.activeplayer)
             # simulation
             now_turn=node.activeplayer
-            actions = feasible_actions(temp_state, now_turn)
+            actions = feasible_actions(node.state, now_turn)
+            temp_state=node.state.copy()
             while True:
                 if len(actions)>0:
-                    #action = random.choice(actions)
-                    action=chose_epsilon_pos_weight(actions,pos_weight)
+                    action = random.choice(actions)
+                    #action=chose_epsilon_pos_weight(actions,pos_weight)
                     temp_state = update_state(temp_state, action[0], action[1], now_turn)
                     node_visited += 1
                     now_turn = -1*now_turn
@@ -96,11 +101,9 @@ def UCT_MCTS(state, max_Iteration, max_time, turn,pos_weight):
                         break
             # backpropagation
             result = game_winner(temp_state)
-            while(node):
-                node.update(result)
-                node = node.parent
-    print node_visited
-    return root.mostVisitedchild().action
+            node.update(result)
+            node=node.parent
+    return root.mostVisitedchild()
 
 def chose_epsilon_pos_weight(actions,pos_weight):
     pos_pair=[pos_weight[action[0]][action[1]] for action in actions]
@@ -139,8 +142,7 @@ def feasible_actions(state, turn):
     feasible_actions = []
     for x in range(8):
         for y in range(8):
-            temp_state = copy.deepcopy(state)
-            if state[x][y] == 0 and quick_check_state(temp_state, x, y, turn) == True:
+            if state[x][y] == 0 and quick_check_state(state, x, y, turn) == True:
                 feasible_actions.append((x, y))
     return feasible_actions
 
@@ -395,7 +397,6 @@ def update_state(state, x, y, turn):
         state[i[0]][i[1]] = turn
     return state
 
-
 class reversi(object):
 
     def __init__(self):
@@ -413,8 +414,7 @@ class reversi(object):
         feasible_move = []
         for x in range(8):
             for y in range(8):
-                temp_state = self.state.copy()
-                if self.state[x][y] == 0 and type(self.complete_update_state(temp_state, x, y, self.turn)) == type(np.zeros(1)):
+                if self.state[x][y] == 0 and quick_check_state(self.state, x, y, self.turn)==True:
                     feasible_move.append((x, y))
         return feasible_move
 
@@ -553,28 +553,28 @@ class reversi(object):
             return state
 
     def winorlose(self):
-        Black = (state == -1).sum()
-        White = (state == 1).sum()
+        Black = (self.state == -1).sum()
+        White = (self.state == 1).sum()
         if  Black>White:
             text_surface = my_font.render("Black win", True, (0, 0, 255))
             screen.blit(text_surface, (120, 150))
             pygame.display.update()
             print 'Black %d , White %d'%(Black,White)
-            time.sleep(10)
+            time.sleep(3)
             print 'Black win'
         elif Black<White:
             text_surface = my_font.render("White win", True, (0, 0, 255))
             screen.blit(text_surface, (120, 150))
             pygame.display.update()
             print 'Black %d , White %d' %(Black,White)
-            time.sleep(10)
+            time.sleep(3)
             print 'White win'
         elif Black==White:
             text_surface = my_font.render("Double win", True, (0, 0, 255))
             screen.blit(text_surface, (120, 150))
             pygame.display.update()
             print 'Black %d , White %d' %(Black,White)
-            time.sleep(10)
+            time.sleep(3)
             print 'Double win'
 
     def plot_graph(self):
@@ -586,11 +586,6 @@ class reversi(object):
                 elif self.state[i][j] == -1:
                     screen.blit(black, (simple2complex(j, i)))
         pygame.display.update()
-
-def quick_policy(flag):
-    if len(flag) == 1:
-        return flag[0]
-    return False
 
 
 def simple2complex(x, y):
@@ -631,17 +626,19 @@ if __name__ == '__main__':
             ai = -1
         else:
             ai = 1
+    op_chosen_node=None
+    ai_pos=None
     while old_flag or flag:
-        old_flag = copy.copy(flag)
+        old_flag = len(flag)
         flag = Reversi.feasible_move_show()
         if flag:
             if model == 'y' and Reversi.turn == ai:
-                if quick_policy(flag):
-                    ai_pos = quick_policy(flag)
+                if not op_chosen_node:
+                    ai_pos= UCT_MCTS(Reversi.state.copy(), 100, 5, ai,pos_weight,op_chosen_node)
                 else:
-                    state = Reversi.state.copy()
-                    ai_pos = UCT_MCTS(state, 100, 5, ai,pos_weight)
-                Reversi.move(ai_pos[0], ai_pos[1])
+                    ai_pos=UCT_MCTS(None, 100, 5, ai, pos_weight, op_chosen_node)
+                print ai_pos.visits
+                Reversi.move(ai_pos.action[0], ai_pos.action[1])
 
             else:
                 flag_stop = False
@@ -655,6 +652,13 @@ if __name__ == '__main__':
                         pos = complex2simple(x, y)
                         if Reversi.move(pos[1], pos[0]):
                             flag_stop = True
+                op_chosen_node=None
+                if ai_pos:
+                    for node in ai_pos.children:
+                        if node.action==(pos[1],pos[0]):
+                            op_chosen_node=node
+
+
         else:
             if Reversi.turn == 1:
                 text_surface = my_font.render(
